@@ -1,0 +1,156 @@
+
+
+
+//=====================
+// Functions
+//=====================
+@function fish-color-map($body, $face, $fin, $eye: $eye-color-dark) {
+    @return (
+        'fin': $fin,
+        'body': $body,
+        'face': $face,
+        'eye': $eye
+    );
+}
+
+//=====================
+// Variables
+//=====================
+$eye-color-dark: #7b7179;
+$orange-map: fish-color-map(#ffb541, #ffcf86, #ff7c66);
+$blue-map: fish-color-map(#47ceff, #4ec4ff, #ffcb72);
+$green-map: fish-color-map(#70b360, #80c46f, #688996);
+$red-map: fish-color-map(#ff7c66, #fc9280, #50a0ae);
+
+//=====================
+// Mixins
+//=====================
+@mixin fish-varient($color-map) {
+    $fin: map-get($color-map, 'fin');
+    $body: map-get($color-map, 'body');
+    $face: map-get($color-map, 'face');
+    $eye: map-get($color-map, 'eye');
+
+    .fin {
+        fill: $fin;
+    }
+    .fin-shadow {
+        fill: darken($fin, 5%);
+    }
+
+    .body {
+        fill: $body;
+    }
+
+    .body-shadow {
+        fill: darken($body, 5%);
+    }
+
+    .face {
+        fill: $face;
+    }
+
+    .face-shadow {
+        fill: darken($face, 5%);
+    }
+
+    .eye {
+        fill: $eye;
+    }
+}
+
+//=====================
+// Animations
+//=====================
+$anim-deg: 1deg;
+@keyframes swim {
+    0% {
+        transform: rotate(0) translatey(0);
+    }
+    33% {
+        transform: rotate($anim-deg);
+    }
+    50% {
+        transform: rotate(0) translatey(-20px);
+    }
+    66% {
+        transform: rotate(-$anim-deg);
+    }
+    100% {
+        transform: rotate(0) translatey(0);
+    }
+}
+
+//=====================
+// Layout
+//=====================
+body {
+    background: #66a4d0;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    color: #333;
+}
+
+.page {
+    width: 1280px;
+    height: 800px;
+    background: rgba(#fff, 0.88);
+    border: 1px solid rgba(0, 0, 0, .12);
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, .54);
+}
+
+
+//=====================
+// Fish
+//=====================
+.fish {
+    .fish-container{
+        // animation: swim 4s ease-in-out infinite;
+        transform: translatey(0);
+        transform-origin: 0 0;
+    }
+
+    .belly {
+        fill: #ffffff;
+        stroke: rgba(0,0,0, .34);
+        stroke-width: 2px;
+    }
+
+    &.color-orange {
+        .fish-container{
+            animation-delay: 1s;
+        }
+
+        @include fish-varient($orange-map);
+    }
+    &.color-red {
+        transform: rotateY(180deg);
+        .fish-container{
+            animation-delay: .5s;
+        }
+        @include fish-varient($red-map);
+    }
+    &.color-blue {
+        .fish-container{
+            animation-delay: .5s;
+        }
+        @include fish-varient($blue-map);
+    }
+    &.color-green {
+        @include fish-varient($green-map);
+    }
+}
+
+
+//=====================
+// Misc
+//=====================
+.foci {
+    stroke: rgba(0,0,0, 0.24);
+    stroke-width: 1;
+    fill: none;
+}
+
