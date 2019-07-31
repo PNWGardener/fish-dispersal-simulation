@@ -1,21 +1,24 @@
-var width = 1280,
-    height = 800,
+var width = 1920,
+    height = 1080,
     elements = {},
     context = {};
 
 var fishTemplate = d3.select('#fish').node();
 var config = {
+    allowWater: true,
+    homeRadius: 90,
+    maxNodesPerHome: 100,
     reproductiveRate: 0.01, // start low
     reproductiveMultiplier: 1.1,
     deathRate: 0.01,
     moveRate: 0.5,
-    nodeSize: 3,
+    nodeSize: 6,
     initialCount: 30,
     clusterPadding: 2,
     padding: 1,
     fociOffset: {
-        left: 140,
-        top: 105
+        left: 300,
+        top: 200
     },
     foci: {
         radius: 20
@@ -45,39 +48,45 @@ var fishes = [
         x: 100,
         y: 100,
         color: 'blue',
-        type: 'fish'
+        type: 'fish',
+        nodeCount: 0
     },
     {
         name: 'Bubbles',
-        x: 700,
-        y: 100,
+        x: 1000,
+        y: 50,
         color: 'red',
-        type: 'fish'
+        type: 'fish',
+        nodeCount: 0
     },
     {
         name: 'CashMoney',
         x: 200,
-        y: 500,
+        y: 550,
         color: 'green',
-        type: 'fish'
+        type: 'fish',
+        nodeCount: 0
     },
     {
         name: 'NoRhymes',
-        x: 900,
-        y: 400,
+        x: 1100,
+        y: 500,
         color: 'orange',
-        type: 'fish'
+        type: 'fish',
+        nodeCount: 0
     }
 ];
 
 var water = {
     x: Math.floor(width / 2),
-    y: Math.floor(height / 2)
+    y: Math.floor(height / 2),
+    nodeCount: 0
 };
 
 var graveyard = {
     x: 0,
-    y: 0
+    y: 0,
+    nodeCount: 0
 };
 
 /*
@@ -177,7 +186,7 @@ function randomizeNode(node) {
     var colorNames = Object.keys(colors);
     var index = node.index % 4;
     var color = colorNames[index];
-    var host = getRandomHost(true);
+    var host = getRandomHost(config.allowWater);
     sendToHost(node, host);
     node.color = color;
     node.state = nodeState.ALIVE;
@@ -226,12 +235,24 @@ elements.fish = elements.stage.selectAll('.fish')
     .data(fishes)
     .enter()
         .append(function(data) { return getClone(data); })
-            .attr('viewBox', `0 0 ${width} ${height}`)
+            .attr('viewBox', '0 0 600 400')
             .attr('width', '600px')
             .attr('height', '400px')
             .attr('x', function(d) { return d.x })
             .attr('y', function(d) { return d.y })
             .attr('class', function(fish) { return ['fish', `color-${fish.color}`].join(' '); });
+
+elements.foci = elements.stage.selectAll('.foci')
+            .data(fishes)
+            .enter().append('circle')
+        .attr('class', 'foci')
+        .attr('r', 10)
+        .style('stroke', 'rgba(0,0,0, 0.24)')
+        .style('fill', 'none')
+        .attr('cx', function(d) { return d.x + config.fociOffset.left })
+        .attr('cy', function(d) { return d.y + config.fociOffset.top });
+        // .style('fill', function(d, i) { return colors[d.color]; })
+        // .style('stroke', function(d, i) { return d3.rgb(colors[d.color]).darker(1); });
 
 function tick(e) {
     elements.node.each(gravity(.051 * e.alpha))
@@ -277,8 +298,6 @@ function collide(alpha) {
     };
 }
 
-var currentIndex = 0;
-var changeCount = 3;
 
 function doesColorMatch(node, host) {
     return node.color && node.color == host.color;
@@ -291,6 +310,10 @@ function removeNode(index, nodes) {
 config.iteration = {
     interval: 200
 };
+
+var currentIndex = 0;
+var changeCount = Math.floor(config.initialCount / (1000 / config.iteration.interval));
+
 
 function render(nodes) {
     // var deadOnes = nodes.filter(function(node) { return node.state == nodeState.DEAD});
@@ -317,29 +340,33 @@ function simulateChange(nodes, startIndex, count) {
     var remove = [];
     for(var i = start; i < end; i++) {
         var node = nodes[i];
+        var nodeCountInHost = node.host.nodeCount;
         var isSameColor = doesColorMatch(node, node.host);
-        var shouldReproduce = shouldDo(isSameColor ? 0.3 : 0.1);
-        var shouldDie = shouldDo(0.1);
+        var shouldReproduce = shouldDo(isSameColor ? 0.5 : 0.1);
+        var shouldDie = shouldDo(0.2);
         var shouldMove = shouldDo(0.3);
+        var nodesInHost = nodes.filter(function(x) {
+            return x.host.color == node.host.color;
+        }).length;
 
         if(shouldReproduce) {
             var child = reproduce(node);
             var index = nodes.length;
-            console.log(`${node.color} had baby in host ${node.host.color}`);
+            // console.log(`${node.color} had baby in host ${node.host.color}`);
             nodes.push(child);
         }
 
         if(shouldDie) {
             // die(node); // TODO: kill node
-            console.log(`${node.color} at ${i} died in host ${node.host.color}`);
+            // console.log(`${node.color} at ${i} died in host ${node.host.color}`);
             remove.push(i);
         }
 
         if(shouldMove) {
             var currentHostColor = node.host.color;
-            var host = getRandomHost(true);
+            var host = getRandomHost(config.allowWater);
             sendToHost(node, host);
-            console.log(`${node.color} moved from ${currentHostColor} to ${host.color}`);
+            // console.log(`${node.color} moved from ${currentHostColor} to ${host.color}`);
         }
 
         nodes[i] = node;
