@@ -1,11 +1,15 @@
 var width = 1920,
     height = 1080,
     elements = {},
-    context = {};
+    context = {
+        paused: false,
+        started: false
+    };
 
 var fishTemplate = d3.select('#fish').node();
 var config = {
-    allowWater: true,
+    allowWater: false,
+    pauseOnClick: true,
     homeRadius: 90,
     maxNodesPerHome: 100,
     reproductiveRate: 0.01, // start low
@@ -13,7 +17,7 @@ var config = {
     deathRate: 0.01,
     moveRate: 0.5,
     nodeSize: 6,
-    initialCount: 30,
+    initialCount: 40,
     clusterPadding: 2,
     padding: 1,
     fociOffset: {
@@ -34,19 +38,28 @@ var nodeState = {
     DEAD: 'dead'
 };
 
+var populations = {
+    red: 0,
+    blue: 0,
+    green: 0,
+    orange: 0,
+    water: 0
+}
+
 var colors = {
     red: '#ff7c66',
     blue: '#47ceff',
     green: '#70b360',
     orange: '#ffb541',
+    purple: '#e89ffc',
     gray: '#eeeeee'
 };
 
 var fishes = [
     {
         name: 'Jackson',
-        x: 100,
-        y: 100,
+        x: 300,
+        y: 130,
         color: 'blue',
         type: 'fish',
         nodeCount: 0
@@ -54,14 +67,14 @@ var fishes = [
     {
         name: 'Bubbles',
         x: 1000,
-        y: 50,
+        y: 90,
         color: 'red',
         type: 'fish',
         nodeCount: 0
     },
     {
         name: 'CashMoney',
-        x: 200,
+        x: 360,
         y: 550,
         color: 'green',
         type: 'fish',
@@ -80,7 +93,9 @@ var fishes = [
 var water = {
     x: Math.floor(width / 2),
     y: Math.floor(height / 2),
-    nodeCount: 0
+    nodeCount: 0,
+    color: 'purple',
+    type: 'water'
 };
 
 var graveyard = {
@@ -108,11 +123,6 @@ var graveyard = {
 
     }
 */
-
-
-function generateMicrobe(species) {
-
-}
 
 function reproduce(node) {
     var child = {
@@ -147,6 +157,13 @@ function getRandomNumber(min, max) {
     return Math.floor(Math.random() * (max - min + 1) + min);
 }
 
+function getRandomOffset(max) {
+    return {
+        left: getRandomNumber(max, -1 * max),
+        top: getRandomNumber(max, -1 * max)
+    }
+}
+
 function getRandomHost(allowWater) {
     var start = allowWater ? -1 : 0;
     var fishIndex = getRandomNumber(start, fishes.length - 1);
@@ -156,6 +173,19 @@ function getRandomHost(allowWater) {
     else {
         return fishes[fishIndex];
     }
+}
+
+function getHostByColor(color) {
+    console.log(`finding host for ${color}`);
+    var host = fishes.find(function(fish) {
+        return fish.color === color;
+    });
+
+    if(!host) {
+        host = config.allowWater ? water : getRandomHost(config.allowWater);
+    }
+    console.log(`color ${color} host is ${host.name}:${host.color}`);
+    return host;
 }
 
 function getHostFoci(host) {
@@ -172,33 +202,46 @@ function getHostFoci(host) {
     return foci;
 }
 
-function randomizeNodes(nodes, count) {
-    d3.range(count || 3).map(function(i) {
-        return getRandomNumber(0, nodes.length);
-    }).forEach(function(i) {
-        var node = nodes[i];
-        nodes[i] = randomizeNode(node);
-    });
-    return nodes;
-}
-
-function randomizeNode(node) {
+function generateNode(node) {
     var colorNames = Object.keys(colors);
-    var index = node.index % 4;
+    var colorCount = config.allowWater ? 5 : 4;
+    var index = node.index % colorCount;
     var color = colorNames[index];
-    var host = getRandomHost(config.allowWater);
+    var host = getHostByColor(color);
     sendToHost(node, host);
     node.color = color;
     node.state = nodeState.ALIVE;
     node.radius = config.nodeSize;
 
+    node.x = water.x;
+    node.y = water.y;
+
     return node;
 }
 
+function updateHostPopulation(host, amount) {
+    if(host && host.type == 'fish') {
+        var currentPop = populations[host.color];
+        populations[host.color] = currentPop + amount;
+    } else {
+        var currentPop = populations.water;
+        populations.water = currentPop + amount;
+    }
+}
+
 function sendToHost(node, host) {
+    if(node.host) {
+        updateHostPopulation(node.host, -1);
+    }
+
+    if(host) {
+        updateHostPopulation(host, 1);
+    }
+
+
     node.host = host;
     node.foci = getHostFoci(host);
-    node.clusterPadding = host.type == 'fish' ? 2 : 15;
+    node.clusterPadding = host.type == 'fish' ? 2 : 25;
 }
 
 function shouldDo(chance) {
@@ -215,7 +258,7 @@ function ifHostFishThenOr(host, then, or) {
 }
 
 context.nodes = d3.range(config.initialCount).map(function(i) {
-    return randomizeNode({ index: i });
+    return generateNode({ index: i });
 });
 
 var force = d3.layout.force()
@@ -225,6 +268,17 @@ var force = d3.layout.force()
     .friction(.91)
     .size([width, height])
     .on('tick', tick);
+
+elements.body = d3.select('body')
+    .on('click', function() {
+        if(!context.started) {
+            start();
+            return;
+        }
+        if(config.pauseOnClick) {
+            context.paused = !context.paused;
+        }
+    })
 
 elements.stage = d3.select('#demo').append('svg')
     .attr('class', 'stage')
@@ -242,17 +296,18 @@ elements.fish = elements.stage.selectAll('.fish')
             .attr('y', function(d) { return d.y })
             .attr('class', function(fish) { return ['fish', `color-${fish.color}`].join(' '); });
 
-elements.foci = elements.stage.selectAll('.foci')
-            .data(fishes)
-            .enter().append('circle')
-        .attr('class', 'foci')
-        .attr('r', 10)
-        .style('stroke', 'rgba(0,0,0, 0.24)')
-        .style('fill', 'none')
-        .attr('cx', function(d) { return d.x + config.fociOffset.left })
-        .attr('cy', function(d) { return d.y + config.fociOffset.top });
-        // .style('fill', function(d, i) { return colors[d.color]; })
-        // .style('stroke', function(d, i) { return d3.rgb(colors[d.color]).darker(1); });
+if(config.showFoci) {
+    elements.foci = elements.stage.selectAll('.foci')
+        .data(fishes)
+        .enter().append('circle')
+            .attr('class', 'foci')
+            .attr('r', 10)
+            .style('stroke', 'rgba(0,0,0, 0.24)')
+            .style('fill', 'none')
+            .attr('cx', function(d) { return d.x + config.fociOffset.left })
+            .attr('cy', function(d) { return d.y + config.fociOffset.top });
+}
+
 
 function tick(e) {
     elements.node.each(gravity(.051 * e.alpha))
@@ -260,19 +315,40 @@ function tick(e) {
         .style('fill', function(d, i) { return colors[d.color]; })
         .style('stroke', function(d, i) { return d3.rgb(colors[d.color]).darker(1); })
         .attr('radius', function(d) { return d.radius; })
-        .attr('cx', function(d) { return d.x; })
-        .attr('cy', function(d) { return d.y; });
+        .attr('cx', function(d) {
+            if(isValidPoint(d)) {
+                return d.x;
+            }
+        })
+        .attr('cy', function(d) {
+            if(isValidPoint(d)) {
+                return d.y;
+            }
+        });
 }
 
 function gravity(alpha) {
     return function(d) {
-        d.y += (d.foci.y - d.y) * alpha;
-        d.x += (d.foci.x - d.x) * alpha;
+
+        if(d.host && d.host.type == 'water' && context.started) {
+            d.y += (d.foci.y - d.y) * alpha * (getRandomNumber(0, 10) / 10);
+            d.x += (d.foci.x - d.x) * alpha * (getRandomNumber(0, 10) / 10);
+        }
+        else {
+            d.y += (d.foci.y - d.y) * alpha;
+            d.x += (d.foci.x - d.x) * alpha;
+        }
     };
 }
 
+function isValidPoint(point) {
+    return point && point.x && point.y && !isNaN(point.x) && !isNaN(point.y);
+}
+
 function collide(alpha) {
+
     var quadtree = d3.geom.quadtree(context.nodes);
+
     return function(d) {
         var r = d.radius + config.nodeSize + Math.max(1, d.clusterPadding),
           nx1 = d.x - r,
@@ -280,11 +356,13 @@ function collide(alpha) {
           ny1 = d.y - r,
           ny2 = d.y + r;
       quadtree.visit(function(quad, x1, y1, x2, y2) {
-        if (quad.point && (quad.point !== d)) {
+
+        if (quad.point && (quad.point !== d) && isValidPoint(quad.point)) {
           var x = d.x - quad.point.x,
               y = d.y - quad.point.y,
               l = Math.sqrt(x * x + y * y),
               r = d.radius + quad.point.radius + (d.foci === quad.point.foci ? 1 : d.clusterPadding);
+
           if (l < r) {
             l = (l - r) / l * alpha;
             d.x -= x *= l;
@@ -312,13 +390,9 @@ config.iteration = {
 };
 
 var currentIndex = 0;
-var changeCount = Math.floor(config.initialCount / (1000 / config.iteration.interval));
-
+var changeCount = Math.floor(Math.min(config.initialCount / (1000 / config.iteration.interval), (config.initialCount / 4)));
 
 function render(nodes) {
-    // var deadOnes = nodes.filter(function(node) { return node.state == nodeState.DEAD});
-    // console.log('Dead Nodes: ', deadOnes.length, deadOnes);
-
     elements.node = elements.node.data(nodes);
     elements.node.enter().insert('circle')
         .attr('class', 'node')
@@ -340,14 +414,14 @@ function simulateChange(nodes, startIndex, count) {
     var remove = [];
     for(var i = start; i < end; i++) {
         var node = nodes[i];
-        var nodeCountInHost = node.host.nodeCount;
+        var population = node.host.color ? populations[node.host.color] : populations.water;
         var isSameColor = doesColorMatch(node, node.host);
         var shouldReproduce = shouldDo(isSameColor ? 0.5 : 0.1);
         var shouldDie = shouldDo(0.2);
-        var shouldMove = shouldDo(0.3);
-        var nodesInHost = nodes.filter(function(x) {
-            return x.host.color == node.host.color;
-        }).length;
+        var shouldMove = !shouldDie && shouldDo(0.3);
+        if(node.host.type == 'fish' && population >= config.maxNodesPerHome) {
+            shouldDie = shouldDo(0.8);
+        }
 
         if(shouldReproduce) {
             var child = reproduce(node);
@@ -359,6 +433,7 @@ function simulateChange(nodes, startIndex, count) {
         if(shouldDie) {
             // die(node); // TODO: kill node
             // console.log(`${node.color} at ${i} died in host ${node.host.color}`);
+            updateHostPopulation(node.host, -1);
             remove.push(i);
         }
 
@@ -376,27 +451,32 @@ function simulateChange(nodes, startIndex, count) {
         nodes.splice(i, 1);
     });
 
-
     return nodes; // .filter(function(node) { return node.state == nodeState.ALIVE; });
 }
 
 elements.node = elements.stage.selectAll('.node');
 
 
-// render(context.nodes);
+config.delay = 4000;
+// setTimeout(start, config.delay);
+render(context.nodes);
+function start() {
+    context.started = true;
+    var iterator = setInterval(function() {
 
-var iterator = setInterval(function() {
-    //force.stop();
-    // context.nodes = randomizeNodes(context.nodes, 3);
-    context.nodes = simulateChange(context.nodes, currentIndex, changeCount);
-    currentIndex += changeCount;
+        if(!context.paused) {
+            context.nodes = simulateChange(context.nodes, currentIndex, changeCount);
+            currentIndex += changeCount;
 
-    if(currentIndex >= context.nodes.length - 1) {
-        currentIndex = 0;
-    }
+            if(currentIndex >= context.nodes.length - 1) {
+                currentIndex = 0;
+            }
+        }
 
-    render(context.nodes);
-}, config.iteration.interval);
+        render(context.nodes);
+    }, config.iteration.interval);
+}
+
 
 
 /*
